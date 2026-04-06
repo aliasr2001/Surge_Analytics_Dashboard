@@ -1,0 +1,18 @@
+version: '1.0'
+
+services:
+  # The Redis buffer 
+  redis:
+    image: redis:7-alpine
+    ports:
+    - "6379:6379" # Connects your PC port 6379 to Docker's 6379
+
+# The Postgres "Vault" (Our permanent storage)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: analytics_db
+    ports:
+      - "5432:5432"
