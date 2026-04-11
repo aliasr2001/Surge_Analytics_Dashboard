@@ -20,6 +20,22 @@ func main() {
 	}
 	fmt.Println("✅ Worker connected to Redis. Waiting for jobs...")
 
+	// 2. Connect to Postgres (The 'Vault')
+	// DSN = Data Source Name (The address/username/password)
+	dsn := "postgres://user:password@localhost:5432/analytics_db?sslmode=disable"
+	db, err := platform.NewPostgresDB(dsn)
+	if err != nil {
+		log.Fatalf("🚨 Worker failed to connect to Postgres: %v", err)
+	}
+	fmt.Println("✅ Worker connected to Postgres!")
+
+	// 3. Create the Table if it doesn't exist (The Architect's Safety Check)
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS events (
+		id SERIAL PRIMARY KEY,
+		data JSONB,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`)
+
 	ctx := context.Background()
 
 	// 2. The Infinite Loop (The heartbeat of a background worker)
@@ -40,5 +56,13 @@ func main() {
 		jsonData := result[1]
 
 		fmt.Printf("📥 BOOM! Worker processed an event: %s\n", jsonData)
+
+		// 3. Save the JSON straight into Postgres!
+    	_, err = db.Exec("INSERT INTO events (data) VALUES ($1)", jsonData)
+    	if err != nil {
+        	log.Printf("❌ Failed to save to DB: %v", err)
+    	} else {
+        	fmt.Println("💾 Saved to Permanent Vault!")
+    	}
 	}
 }
