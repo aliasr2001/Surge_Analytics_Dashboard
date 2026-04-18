@@ -1,0 +1,12 @@
+# Binaries (Compiled code)
+surge-engine
+cmd/worker/worker
+
+# Environment Secrets (Crucial!)
+.env
+
+# Docker data (if any)
+postgres_data/
+
+# OS metadata
+.DS_Store
