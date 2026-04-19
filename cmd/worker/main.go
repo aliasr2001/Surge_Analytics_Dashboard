@@ -1,6 +1,7 @@
 package main
 
 import (
+	"time"
 	"context"
 	"fmt"
 	"log"
@@ -38,9 +39,14 @@ func main() {
 
 	batchSize := 10
 	var batch []string // This is our "Bus" (the slice to hold JSON data)
+
+	// Create a "Ticker" that sends a signal every 5 seconds
+    ticker := time.NewTicker(5 * time.Second)
+    defer ticker.Stop()
+
 	ctx := context.Background()
 
-	fmt.Println("👷 Worker is ready and Batching is enabled (Size: 10)...")
+    fmt.Println("👷 Worker started with Batching (10) and Timer (5s)...")
 
 
 	// 2. The Infinite Loop (The heartbeat of a background worker)
@@ -74,28 +80,55 @@ func main() {
 		// Batching Logic
 
 		// 1. Grab 1 item from Redis
-		result, err := rdb.BRPop(ctx, 0, "analytics").Result()
-		if err != nil {
-			log.Printf("Error: %v", err)
-			continue
-		}
+		// result, err := rdb.BRPop(ctx, 0, "analytics").Result()
+		// if err != nil {
+		// 	log.Printf("Error: %v", err)
+		// 	continue
+		// }
 
-		// 2. Add the item to our memory batch
-		batch = append(batch, result[1])
-		fmt.Printf("📝 Added to batch. Current size: %d/%d\n", len(batch), batchSize)
+		// // 2. Add the item to our memory batch
+		// batch = append(batch, result[1])
+		// fmt.Printf("📝 Added to batch. Current size: %d/%d\n", len(batch), batchSize)
 
-		// 3. If the batch is full, FLUSH IT to Postgres
-		if len(batch) >= batchSize {
-			err := flushToPostgres(db, batch)
-			if err != nil {
-				log.Printf("❌ Batch Save Failed: %v", err)
-			} else {
-				fmt.Println("🚀 BATCH SAVED: 10 events persisted in one transaction!")
-			}
+		// // 3. If the batch is full, FLUSH IT to Postgres
+		// if len(batch) >= batchSize {
+		// 	err := flushToPostgres(db, batch)
+		// 	if err != nil {
+		// 		log.Printf("❌ Batch Save Failed: %v", err)
+		// 	} else {
+		// 		fmt.Println("🚀 BATCH SAVED: 10 events persisted in one transaction!")
+		// 	}
 
-			// 4. Clear the batch for the next round
-			batch = nil 
-		}
+		// 	// 4. Clear the batch for the next round
+		// 	batch = nil 
+		// }
+
+		// timer-based flushing orchestration Logic
+
+		select {
+        // SIGNAL 1: A new item arrived in Redis
+        case <-time.After(100 * time.Millisecond): // We check Redis frequently
+            // Use LPop (non-blocking) or a short timeout RPop here for the select pattern
+            result, err := rdb.RPop(ctx, "analytics").Result()
+            if err == nil {
+                batch = append(batch, result)
+                fmt.Printf("📝 Added to batch. Size: %d/%d\n", len(batch), batchSize)
+            }
+
+            if len(batch) >= batchSize {
+                fmt.Println("🚌 Bus full! Flushing...")
+                flushToPostgres(db, batch)
+                batch = nil
+            }
+
+        // SIGNAL 2: The 5-second timer went off!
+        case <-ticker.C:
+            if len(batch) > 0 {
+                fmt.Println("⏰ Timer hit! Flushing partial batch...")
+                flushToPostgres(db, batch)
+                batch = nil
+            }
+        }
 	}
 }
 
