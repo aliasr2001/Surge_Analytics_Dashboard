@@ -7,6 +7,7 @@ import (
 	"log"
 	"surge-engine/internal/platform" // Ensure this matches your 'go mod init' name
 	"time"
+	"surge-engine/internal/middleware"
 )
 
 type Event struct {
@@ -15,7 +16,22 @@ type Event struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+var limiter = middleware.NewIPRateLimiter(1, 5) // 1 request per second, burst of 5
+
 func main() {
+
+	// Imagine this is inside your HTTP handler or loop
+    userIP := "192.168.1.1" // In a real API, you'd get this from the request
+    
+    // Ask the bodyguard: "Does this user have a token?"
+    if !limiter.GetLimiter(userIP).Allow() {
+        fmt.Println("🚫 Rate limit exceeded! Request dropped.")
+        return // Stop right here, don't go to Redis
+    }
+
+    // ... (Continue to Redis LPUSH if they HAVE a token)
+    fmt.Println("✅ Token granted. Processing request...")
+
 	// 1. Connect to the Infrastructure (Running in Docker)
 	// Note: 'localhost:6379' works because you mapped ports in docker-compose
 	rdb, err := platform.NewRedisClient("localhost:6379")
